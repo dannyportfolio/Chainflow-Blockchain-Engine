@@ -1,0 +1,32 @@
+# Binaries and build artifacts
+/bin/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore
+*.p12
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local data and logs
+/tmp/
+/data/
+*.log

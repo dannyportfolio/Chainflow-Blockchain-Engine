@@ -1,0 +1,21 @@
+schema: spec-driven
+
+context: |
+  ChainFlow is a distributed, fault-tolerant EVM blockchain transaction orchestration engine written in Go.
+  Primary source of truth: PostgreSQL (pgx, SQL-first, versioned migrations).
+  Event bus: NATS JetStream (at-least-once delivery, durable consumers, transactional outbox).
+  Target blockchain: EVM-compatible chains (Ethereum Sepolia testnet + local simulator for MVP).
+  Engineering standards:
+  - Explicit transaction state machines with single-owner transitions and optimistic locking.
+  - Bounded concurrency only; propagate context.Context everywhere; graceful shutdown mandatory.
+  - Isolated Signer interface; never store or log plaintext private keys or secrets.
+  - Test-Driven Development (TDD), go test -race on concurrency paths, no mock claims presented as production readiness.
+
+rules:
+  proposal:
+    - Always separate MVP scope from deferred capabilities.
+    - Document failure modes and idempotency guarantees explicitly.
+  specs:
+    - Define exact state transitions, error codes, and acceptance criteria.
+  tasks:
+    - Break implementation into small, independently testable TDD tasks.
