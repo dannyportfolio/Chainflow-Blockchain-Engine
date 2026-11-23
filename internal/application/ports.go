@@ -46,6 +46,7 @@ type IntentRepository interface {
 	) (IdempotencyCreateResult, error)
 
 	GetIntentByID(ctx context.Context, tenantID, intentID string) (domain.TransactionIntent, error)
+	GetIntentByIDForSystem(ctx context.Context, intentID string) (domain.TransactionIntent, error)
 
 	TransitionIntentWithOutbox(
 		ctx context.Context,

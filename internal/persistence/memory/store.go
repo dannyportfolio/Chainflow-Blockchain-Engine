@@ -116,6 +116,17 @@ func (s *Store) GetIntentByID(_ context.Context, tenantID, intentID string) (dom
 	return cloneIntent(intent), nil
 }
 
+func (s *Store) GetIntentByIDForSystem(_ context.Context, intentID string) (domain.TransactionIntent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	intent, ok := s.intents[intentID]
+	if !ok {
+		return domain.TransactionIntent{}, application.ErrNotFound
+	}
+	return cloneIntent(intent), nil
+}
+
 func (s *Store) TransitionIntentWithOutbox(
 	_ context.Context,
 	expectedVersion int64,

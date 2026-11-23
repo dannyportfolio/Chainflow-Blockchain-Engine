@@ -114,6 +114,21 @@ func (s *Store) GetIntentByID(ctx context.Context, tenantID, intentID string) (d
 	return intent, nil
 }
 
+func (s *Store) GetIntentByIDForSystem(ctx context.Context, intentID string) (domain.TransactionIntent, error) {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+intentSelectColumns+` FROM transaction_intents WHERE id = $1`,
+		intentID,
+	)
+	intent, err := scanIntent(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.TransactionIntent{}, application.ErrNotFound
+	}
+	if err != nil {
+		return domain.TransactionIntent{}, fmt.Errorf("get intent for system: %w", err)
+	}
+	return intent, nil
+}
+
 func (s *Store) TransitionIntentWithOutbox(
 	ctx context.Context,
 	expectedVersion int64,
