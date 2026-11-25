@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chainflow.fullname" . }}-orchestrator
+  labels:
+    {{- include "chainflow.roleLabels" (dict "root" . "role" "orchestrator") | nindent 4 }}
+spec:
+  replicas: {{ .Values.orchestrator.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "chainflow.roleSelectorLabels" (dict "root" . "role" "orchestrator") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chainflow.roleLabels" (dict "root" . "role" "orchestrator") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "chainflow.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.orchestrator.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "chainflow.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: orchestrator
+          image: {{ printf "%s/chainflow-orchestrator:%s" .Values.image.repository .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "chainflow.containerSecurityContext" . | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "chainflow.fullname" . }}-config
+            - secretRef:
+                name: {{ default (printf "%s-secrets" (include "chainflow.fullname" .)) .Values.secrets.existingSecret }}
+          resources:
+            {{- toYaml .Values.orchestrator.resources | nindent 12 }}

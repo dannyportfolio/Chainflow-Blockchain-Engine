@@ -296,6 +296,14 @@ func RunStoreContractTests(t *testing.T, newStore func(t *testing.T) StoreBundle
 			t.Fatalf("expected %d unique nonces, got %d", n, len(seen))
 		}
 	})
+
+	t.Run("GetReceiptByExecutionID", func(t *testing.T) {
+		ctx := context.Background()
+		s := newStore(t)
+		if _, err := s.Executions.GetReceiptByExecutionID(ctx, "01934a1a-0000-7000-8000-000000009999"); !errors.Is(err, application.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound for missing receipt, got %v", err)
+		}
+	})
 }
 
 func seedWallet(t *testing.T, ctx context.Context, repo application.WalletRepository, addr domain.Address, maxInflight int, now time.Time) {

@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chainflow.fullname" . }}-tx-worker
+  labels:
+    {{- include "chainflow.roleLabels" (dict "root" . "role" "tx-worker") | nindent 4 }}
+spec:
+  replicas: {{ .Values.txWorker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "chainflow.roleSelectorLabels" (dict "root" . "role" "tx-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chainflow.roleLabels" (dict "root" . "role" "tx-worker") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "chainflow.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.txWorker.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "chainflow.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: tx-worker
+          image: {{ printf "%s/chainflow-tx-worker:%s" .Values.image.repository .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "chainflow.containerSecurityContext" . | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "chainflow.fullname" . }}-config
+            - secretRef:
+                name: {{ default (printf "%s-secrets" (include "chainflow.fullname" .)) .Values.secrets.existingSecret }}
+          resources:
+            {{- toYaml .Values.txWorker.resources | nindent 12 }}

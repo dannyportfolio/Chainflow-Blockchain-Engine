@@ -40,8 +40,16 @@ type Config struct {
 	Database DatabaseConfig
 	NATS     NATSConfig
 	Worker   WorkerConfig
+	Monitor  MonitorConfig
 	Chain    ChainConfig
 	Auth     AuthConfig
+}
+
+type MonitorConfig struct {
+	PollInterval    time.Duration
+	BatchSize       int
+	StalePendingTTL time.Duration
+	RBFBumpBps      uint64
 }
 
 type AuthConfig struct {
@@ -110,6 +118,12 @@ func LoadFromLookup(lookup func(string) (string, bool)) (Config, error) {
 			Concurrency: 20,
 			LeaseTTL:    30 * time.Second,
 		},
+		Monitor: MonitorConfig{
+			PollInterval:    2 * time.Second,
+			BatchSize:       100,
+			StalePendingTTL: 2 * time.Minute,
+			RBFBumpBps:      1500,
+		},
 		Chain: ChainConfig{
 			ChainID:               11155111,
 			RequiredConfirmations: 6,
@@ -168,6 +182,23 @@ func LoadFromLookup(lookup func(string) (string, bool)) (Config, error) {
 	}
 	if err := parseDurationEnv(lookup, "CHAINFLOW_WORKER_LEASE_TTL", &cfg.Worker.LeaseTTL); err != nil {
 		return Config{}, err
+	}
+
+	if err := parseDurationEnv(lookup, "CHAINFLOW_MONITOR_POLL_INTERVAL", &cfg.Monitor.PollInterval); err != nil {
+		return Config{}, err
+	}
+	if err := parseIntEnv(lookup, "CHAINFLOW_MONITOR_BATCH_SIZE", &cfg.Monitor.BatchSize); err != nil {
+		return Config{}, err
+	}
+	if err := parseDurationEnv(lookup, "CHAINFLOW_MONITOR_STALE_PENDING_TTL", &cfg.Monitor.StalePendingTTL); err != nil {
+		return Config{}, err
+	}
+	if v, ok := lookup("CHAINFLOW_MONITOR_RBF_BUMP_BPS"); ok && strings.TrimSpace(v) != "" {
+		n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid CHAINFLOW_MONITOR_RBF_BUMP_BPS: %w", err)
+		}
+		cfg.Monitor.RBFBumpBps = n
 	}
 
 	if err := parseInt64Env(lookup, "CHAINFLOW_CHAIN_ID", &cfg.Chain.ChainID); err != nil {
@@ -252,6 +283,19 @@ func (c Config) Validate() error {
 	}
 	if c.NATS.AckWait <= c.Worker.LeaseTTL {
 		errs = append(errs, errors.New("nats ack_wait must be greater than worker lease_ttl"))
+	}
+
+	if c.Monitor.PollInterval <= 0 {
+		errs = append(errs, errors.New("monitor poll_interval must be positive"))
+	}
+	if c.Monitor.BatchSize <= 0 {
+		errs = append(errs, errors.New("monitor batch_size must be positive"))
+	}
+	if c.Monitor.StalePendingTTL <= 0 {
+		errs = append(errs, errors.New("monitor stale_pending_ttl must be positive"))
+	}
+	if c.Monitor.RBFBumpBps < 1000 {
+		errs = append(errs, errors.New("monitor rbf_bump_bps must be at least 1000 (10%)"))
 	}
 
 	if c.Chain.ChainID <= 0 {

@@ -37,6 +37,18 @@ func TestLoadFromMap_DefaultsAndValidation(t *testing.T) {
 	if cfg.NATS.AckWait <= cfg.Worker.LeaseTTL {
 		t.Fatalf("expected AckWait (%s) > LeaseTTL (%s)", cfg.NATS.AckWait, cfg.Worker.LeaseTTL)
 	}
+	if cfg.Monitor.PollInterval != 2*time.Second {
+		t.Fatalf("expected default Monitor.PollInterval 2s, got %s", cfg.Monitor.PollInterval)
+	}
+	if cfg.Monitor.BatchSize != 100 {
+		t.Fatalf("expected default Monitor.BatchSize 100, got %d", cfg.Monitor.BatchSize)
+	}
+	if cfg.Monitor.StalePendingTTL != 2*time.Minute {
+		t.Fatalf("expected default Monitor.StalePendingTTL 2m, got %s", cfg.Monitor.StalePendingTTL)
+	}
+	if cfg.Monitor.RBFBumpBps != 1500 {
+		t.Fatalf("expected default Monitor.RBFBumpBps 1500, got %d", cfg.Monitor.RBFBumpBps)
+	}
 }
 
 func TestConfigValidate_RejectsInvalidInvariants(t *testing.T) {

@@ -1,0 +1,23 @@
+{{- if .Values.txWorker.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "chainflow.fullname" . }}-tx-worker
+  labels:
+    {{- include "chainflow.roleLabels" (dict "root" . "role" "tx-worker") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "chainflow.fullname" . }}-tx-worker
+  minReplicaCount: {{ .Values.txWorker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.txWorker.keda.maxReplicaCount }}
+  pollingInterval: {{ .Values.txWorker.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.txWorker.keda.cooldownPeriod }}
+  triggers:
+    - type: nats-jetstream
+      metadata:
+        natsServerMonitoringEndpoint: {{ .Values.config.natsMonitoringUrl | quote }}
+        stream: {{ .Values.config.natsStream | quote }}
+        consumer: {{ .Values.txWorker.keda.consumer | quote }}
+        lagThreshold: {{ .Values.txWorker.keda.lagThreshold | quote }}
+        activationLagThreshold: {{ .Values.txWorker.keda.activationLagThreshold | quote }}
+{{- end }}

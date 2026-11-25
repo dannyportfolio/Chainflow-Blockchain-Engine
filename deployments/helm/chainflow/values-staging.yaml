@@ -1,0 +1,18 @@
+config:
+  env: staging
+  logLevel: debug
+  requiredConfirmations: "3"
+
+api:
+  replicas: 1
+  hpa:
+    enabled: false
+  pdb:
+    enabled: false
+
+txWorker:
+  replicas: 1
+  keda:
+    enabled: false
+  pdb:
+    enabled: false

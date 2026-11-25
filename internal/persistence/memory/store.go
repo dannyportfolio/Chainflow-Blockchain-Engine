@@ -324,6 +324,17 @@ func (s *Store) UpsertReceipt(_ context.Context, receipt domain.TransactionRecei
 	return nil
 }
 
+func (s *Store) GetReceiptByExecutionID(_ context.Context, execID string) (domain.TransactionReceipt, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, ok := s.receipts[execID]
+	if !ok {
+		return domain.TransactionReceipt{}, application.ErrNotFound
+	}
+	return r, nil
+}
+
 func (s *Store) ReserveNextNonce(_ context.Context, chainID int64, walletAddr domain.Address, intentID string, now time.Time) (domain.NonceReservation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

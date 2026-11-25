@@ -1,0 +1,13 @@
+{{- if .Values.txWorker.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "chainflow.fullname" . }}-tx-worker
+  labels:
+    {{- include "chainflow.roleLabels" (dict "root" . "role" "tx-worker") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.txWorker.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "chainflow.roleSelectorLabels" (dict "root" . "role" "tx-worker") | nindent 6 }}
+{{- end }}

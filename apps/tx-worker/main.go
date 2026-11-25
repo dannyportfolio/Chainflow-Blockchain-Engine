@@ -125,9 +125,10 @@ func main() {
 		MaxFeeCapWei: cfg.Chain.MaxFeeCapWei,
 	}, nil)
 	processor := concurrency.NewTxProcessor(store, store, store, store, gasEst, router, devSigner, concurrency.TxProcessorConfig{
-		WorkerID: workerID,
-		LeaseTTL: cfg.Worker.LeaseTTL,
-		Logger:   logger,
+		WorkerID:   workerID,
+		LeaseTTL:   cfg.Worker.LeaseTTL,
+		RBFBumpBps: cfg.Monitor.RBFBumpBps,
+		Logger:     logger,
 	})
 	pub := messaging.NewJetStreamPublisher(js)
 	poolRunner := concurrency.NewWorkerPool(cons, processor, pub, concurrency.WorkerPoolConfig{

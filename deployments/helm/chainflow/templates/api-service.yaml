@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chainflow.fullname" . }}-api
+  labels:
+    {{- include "chainflow.roleLabels" (dict "root" . "role" "api") | nindent 4 }}
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.api.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "chainflow.roleSelectorLabels" (dict "root" . "role" "api") | nindent 4 }}

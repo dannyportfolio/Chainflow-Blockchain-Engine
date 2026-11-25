@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "chainflow.fullname" . }}-config
+  labels:
+    {{- include "chainflow.labels" . | nindent 4 }}
+data:
+  CHAINFLOW_ENV: {{ .Values.config.env | quote }}
+  CHAINFLOW_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  CHAINFLOW_HTTP_ADDR: {{ .Values.config.httpAddr | quote }}
+  CHAINFLOW_HTTP_SHUTDOWN_TIMEOUT: {{ .Values.config.httpShutdownTimeout | quote }}
+  CHAINFLOW_NATS_URL: {{ .Values.config.natsUrl | quote }}
+  CHAINFLOW_NATS_STREAM: {{ .Values.config.natsStream | quote }}
+  CHAINFLOW_NATS_ACK_WAIT: {{ .Values.config.natsAckWait | quote }}
+  CHAINFLOW_WORKER_CONCURRENCY: {{ .Values.config.workerConcurrency | quote }}
+  CHAINFLOW_WORKER_LEASE_TTL: {{ .Values.config.workerLeaseTTL | quote }}
+  CHAINFLOW_CHAIN_ID: {{ .Values.config.chainId | quote }}
+  CHAINFLOW_REQUIRED_CONFIRMATIONS: {{ .Values.config.requiredConfirmations | quote }}
+  CHAINFLOW_RPC_URLS: {{ .Values.config.rpcUrls | quote }}
+  CHAINFLOW_MONITOR_POLL_INTERVAL: {{ .Values.config.monitorPollInterval | quote }}
+  CHAINFLOW_MONITOR_BATCH_SIZE: {{ .Values.config.monitorBatchSize | quote }}
+  CHAINFLOW_MONITOR_STALE_PENDING_TTL: {{ .Values.config.monitorStalePendingTTL | quote }}
+  CHAINFLOW_MONITOR_RBF_BUMP_BPS: {{ .Values.config.monitorRbfBumpBps | quote }}

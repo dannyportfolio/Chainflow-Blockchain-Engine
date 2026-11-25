@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chainflow.fullname" . }}-confirmation-worker
+  labels:
+    {{- include "chainflow.roleLabels" (dict "root" . "role" "confirmation-worker") | nindent 4 }}
+spec:
+  replicas: {{ .Values.confirmationWorker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "chainflow.roleSelectorLabels" (dict "root" . "role" "confirmation-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chainflow.roleLabels" (dict "root" . "role" "confirmation-worker") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "chainflow.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.confirmationWorker.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "chainflow.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: confirmation-worker
+          image: {{ printf "%s/chainflow-confirmation-worker:%s" .Values.image.repository .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "chainflow.containerSecurityContext" . | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "chainflow.fullname" . }}-config
+            - secretRef:
+                name: {{ default (printf "%s-secrets" (include "chainflow.fullname" .)) .Values.secrets.existingSecret }}
+          resources:
+            {{- toYaml .Values.confirmationWorker.resources | nindent 12 }}

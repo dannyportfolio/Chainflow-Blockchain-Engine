@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -151,6 +152,47 @@ func (s *Store) UpsertReceipt(ctx context.Context, r domain.TransactionReceipt) 
 		return fmt.Errorf("upsert receipt: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) GetReceiptByExecutionID(ctx context.Context, execID string) (domain.TransactionReceipt, error) {
+	var r domain.TransactionReceipt
+	var txHashBytes, blockHashBytes []byte
+	var blockNum, gasUsed int64
+	var txIdx, confs int32
+	var onchainStatus int16
+	var effPriceStr string
+
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			execution_id::text, tx_hash, block_number, block_hash, transaction_index,
+			gas_used, effective_gas_price_wei::text, onchain_status, confirmations, reorged, observed_at, updated_at
+		FROM transaction_receipts
+		WHERE execution_id = $1::uuid
+	`, execID).Scan(
+		&r.ExecutionID, &txHashBytes, &blockNum, &blockHashBytes, &txIdx,
+		&gasUsed, &effPriceStr, &onchainStatus, &confs, &r.Reorged, &r.ObservedAt, &r.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.TransactionReceipt{}, application.ErrNotFound
+		}
+		return domain.TransactionReceipt{}, fmt.Errorf("get receipt by execution id: %w", err)
+	}
+	if r.TxHash, err = bytesToHash(txHashBytes); err != nil {
+		return domain.TransactionReceipt{}, err
+	}
+	if r.BlockHash, err = bytesToHash(blockHashBytes); err != nil {
+		return domain.TransactionReceipt{}, err
+	}
+	if r.EffectiveGasPrice, err = parseBigInt(effPriceStr); err != nil {
+		return domain.TransactionReceipt{}, err
+	}
+	r.BlockNumber = uint64(blockNum)
+	r.TransactionIndex = uint32(txIdx)
+	r.GasUsed = uint64(gasUsed)
+	r.OnchainStatus = uint8(onchainStatus)
+	r.Confirmations = uint64(confs)
+	return r, nil
 }
 
 func collectExecutions(rows pgx.Rows) ([]domain.TransactionExecution, error) {

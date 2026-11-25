@@ -70,6 +70,7 @@ type ExecutionRepository interface {
 	ListActiveExecutions(ctx context.Context, chainID int64, limit int) ([]domain.TransactionExecution, error)
 	ListExecutionsByIntent(ctx context.Context, intentID string) ([]domain.TransactionExecution, error)
 	UpsertReceipt(ctx context.Context, receipt domain.TransactionReceipt) error
+	GetReceiptByExecutionID(ctx context.Context, execID string) (domain.TransactionReceipt, error)
 }
 
 type NonceCoordinator interface {

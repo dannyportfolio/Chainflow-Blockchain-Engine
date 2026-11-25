@@ -14,6 +14,7 @@ import (
 
 	"github.com/chainflow/chainflow/internal/application"
 	"github.com/chainflow/chainflow/internal/domain"
+	"github.com/chainflow/chainflow/internal/observability"
 	"github.com/chainflow/chainflow/internal/security"
 )
 
@@ -32,6 +33,7 @@ type HandlerDeps struct {
 	Limiter    *security.TenantRateLimiter
 	Logger     *slog.Logger
 	ReadyCheck func(context.Context) error
+	Metrics    *observability.Metrics
 	Now        func() time.Time
 }
 
@@ -115,11 +117,18 @@ func NewHandler(deps HandlerDeps) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /readyz", s.handleReady)
+	if deps.Metrics != nil {
+		mux.Handle("GET /metrics", deps.Metrics.Handler())
+	}
 	mux.Handle("POST /v1/transactions", s.withAuth(http.HandlerFunc(s.handleSubmitTransaction)))
 	mux.Handle("GET /v1/transactions/{id}", s.withAuth(http.HandlerFunc(s.handleGetTransaction)))
 	mux.Handle("POST /v1/transactions/{id}/cancel", s.withAuth(http.HandlerFunc(s.handleCancelTransaction)))
 
-	return s.withRequestID(s.withLogging(s.withRecovery(mux)))
+	var root http.Handler = mux
+	if deps.Metrics != nil {
+		root = deps.Metrics.HTTPMiddleware(root)
+	}
+	return s.withRequestID(s.withLogging(s.withRecovery(root)))
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {

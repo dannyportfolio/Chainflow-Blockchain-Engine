@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,18 +11,20 @@ import (
 	"github.com/chainflow/chainflow/internal/api"
 	"github.com/chainflow/chainflow/internal/application"
 	"github.com/chainflow/chainflow/internal/config"
+	"github.com/chainflow/chainflow/internal/observability"
 	"github.com/chainflow/chainflow/internal/persistence/postgres"
 	"github.com/chainflow/chainflow/internal/security"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Error("load config failed", "error", err)
+		observability.NewLogger("info", "api", os.Stdout).Error("load config failed", "error", err)
 		os.Exit(1)
 	}
+	logger := observability.NewLogger(cfg.LogLevel, "api", os.Stdout)
+	metrics := observability.NewMetrics("api")
+	_ = observability.InitTracing("chainflow-api")
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -70,6 +71,7 @@ func main() {
 		Auth:    auth,
 		Limiter: limiter,
 		Logger:  logger,
+		Metrics: metrics,
 		ReadyCheck: func(c context.Context) error {
 			return pool.Ping(c)
 		},

@@ -33,11 +33,12 @@ type ProcessResult struct {
 }
 
 type TxProcessorConfig struct {
-	WorkerID string
-	LeaseTTL time.Duration
-	Now      func() time.Time
-	NewID    func() (string, error)
-	Logger   *slog.Logger
+	WorkerID   string
+	LeaseTTL   time.Duration
+	RBFBumpBps uint64
+	Now        func() time.Time
+	NewID      func() (string, error)
+	Logger     *slog.Logger
 }
 
 type TxProcessor struct {
@@ -67,6 +68,9 @@ func NewTxProcessor(
 	}
 	if cfg.LeaseTTL <= 0 {
 		cfg.LeaseTTL = 30 * time.Second
+	}
+	if cfg.RBFBumpBps < 1000 {
+		cfg.RBFBumpBps = 1500
 	}
 	if cfg.Now == nil {
 		cfg.Now = func() time.Time { return time.Now().UTC() }
@@ -146,9 +150,40 @@ func (p *TxProcessor) ProcessMessage(ctx context.Context, subject string, data [
 		return p.handleProcessingError(ctx, intent, "", 0, false, application.ErrWalletNotActive)
 	}
 
+	priorExecs, err := p.executions.ListExecutionsByIntent(ctx, intent.ID)
+	if err != nil {
+		return p.handleProcessingError(ctx, intent, "", 0, false, err)
+	}
+
+	var priorExec *domain.TransactionExecution
+	for i := len(priorExecs) - 1; i >= 0; i-- {
+		e := priorExecs[i]
+		if e.Status != domain.ExecFailed || e.TxHash != nil {
+			priorExec = &e
+			break
+		}
+	}
+
 	fees, err := p.gas.SuggestFees(ctx)
 	if err != nil {
 		return p.handleProcessingError(ctx, intent, "", 0, false, err)
+	}
+	if priorExec != nil && priorExec.MaxPriorityFeeWei != nil && priorExec.MaxFeePerGasWei != nil {
+		bumpPrio, bumpMax, bumpErr := domain.CalculateRBFBump(
+			priorExec.MaxPriorityFeeWei,
+			priorExec.MaxFeePerGasWei,
+			intent.MaxFeeCapWei,
+			p.cfg.RBFBumpBps,
+		)
+		if bumpErr != nil {
+			return p.handleProcessingError(ctx, intent, "", 0, false, bumpErr)
+		}
+		if bumpPrio.Cmp(fees.MaxPriorityFeePerGas) > 0 {
+			fees.MaxPriorityFeePerGas = bumpPrio
+		}
+		if bumpMax.Cmp(fees.MaxFeePerGas) > 0 {
+			fees.MaxFeePerGas = bumpMax
+		}
 	}
 	if intent.MaxFeeCapWei != nil && fees.MaxFeePerGas.Cmp(intent.MaxFeeCapWei) > 0 {
 		return p.handleProcessingError(ctx, intent, "", 0, false,
@@ -170,14 +205,24 @@ func (p *TxProcessor) ProcessMessage(ctx context.Context, subject string, data [
 		}
 	}
 
-	nonceRes, err := p.nonces.ReserveNextNonce(ctx, intent.ChainID, intent.From, intent.ID, p.cfg.Now().UTC())
-	if err != nil {
-		return p.handleProcessingError(ctx, intent, "", 0, false, err)
+	var txNonce uint64
+	var newlyReservedNonce bool
+	if priorExec != nil {
+		txNonce = priorExec.Nonce
+	} else {
+		nonceRes, err := p.nonces.ReserveNextNonce(ctx, intent.ChainID, intent.From, intent.ID, p.cfg.Now().UTC())
+		if err != nil {
+			return p.handleProcessingError(ctx, intent, "", 0, false, err)
+		}
+		txNonce = nonceRes.Nonce
+		newlyReservedNonce = true
 	}
 
 	execID, err := p.cfg.NewID()
 	if err != nil {
-		_ = p.nonces.ReleaseUnbroadcastNonce(ctx, intent.ChainID, intent.From, nonceRes.Nonce, p.cfg.Now().UTC())
+		if newlyReservedNonce {
+			_ = p.nonces.ReleaseUnbroadcastNonce(ctx, intent.ChainID, intent.From, txNonce, p.cfg.Now().UTC())
+		}
 		return p.handleProcessingError(ctx, intent, "", 0, false, err)
 	}
 
@@ -188,7 +233,7 @@ func (p *TxProcessor) ProcessMessage(ctx context.Context, subject string, data [
 		AttemptNumber:     intent.AttemptCount,
 		ChainID:           intent.ChainID,
 		From:              intent.From,
-		Nonce:             nonceRes.Nonce,
+		Nonce:             txNonce,
 		GasLimit:          gasLimit,
 		MaxPriorityFeeWei: new(big.Int).Set(fees.MaxPriorityFeePerGas),
 		MaxFeePerGasWei:   new(big.Int).Set(fees.MaxFeePerGas),
@@ -197,7 +242,9 @@ func (p *TxProcessor) ProcessMessage(ctx context.Context, subject string, data [
 		UpdatedAt:         execNow,
 	}
 	if err := p.executions.CreateExecution(ctx, exec); err != nil {
-		_ = p.nonces.ReleaseUnbroadcastNonce(ctx, intent.ChainID, intent.From, nonceRes.Nonce, p.cfg.Now().UTC())
+		if newlyReservedNonce {
+			_ = p.nonces.ReleaseUnbroadcastNonce(ctx, intent.ChainID, intent.From, txNonce, p.cfg.Now().UTC())
+		}
 		return p.handleProcessingError(ctx, intent, "", 0, false, err)
 	}
 
@@ -211,7 +258,7 @@ func (p *TxProcessor) ProcessMessage(ctx context.Context, subject string, data [
 		ChainID:              big.NewInt(intent.ChainID),
 		From:                 common.BytesToAddress(intent.From.Bytes()),
 		To:                   toEth,
-		Nonce:                nonceRes.Nonce,
+		Nonce:                txNonce,
 		ValueWei:             intent.ValueWei,
 		Data:                 intent.Calldata,
 		GasLimit:             gasLimit,
@@ -219,17 +266,17 @@ func (p *TxProcessor) ProcessMessage(ctx context.Context, subject string, data [
 		MaxFeePerGas:         fees.MaxFeePerGas,
 	})
 	if err != nil {
-		return p.handleProcessingError(ctx, intent, execID, nonceRes.Nonce, true, err)
+		return p.handleProcessingError(ctx, intent, execID, txNonce, true, err)
 	}
 
 	txHash, rawSigned, err := signer.EncodeSignedTx(signedTx)
 	if err != nil {
-		return p.handleProcessingError(ctx, intent, execID, nonceRes.Nonce, true, err)
+		return p.handleProcessingError(ctx, intent, execID, txNonce, true, err)
 	}
 
 	signNow := p.cfg.Now().UTC()
 	if err := p.executions.UpdateExecutionSigned(ctx, execID, txHash, rawSigned, signNow); err != nil {
-		return p.handleProcessingError(ctx, intent, execID, nonceRes.Nonce, true, err)
+		return p.handleProcessingError(ctx, intent, execID, txNonce, true, err)
 	}
 
 	expectedVersion = intent.Version
@@ -244,14 +291,14 @@ func (p *TxProcessor) ProcessMessage(ctx context.Context, subject string, data [
 		Now:         signNow,
 	})
 	if err != nil {
-		return p.handleProcessingError(ctx, intent, execID, nonceRes.Nonce, true, err)
+		return p.handleProcessingError(ctx, intent, execID, txNonce, true, err)
 	}
 	if err := p.intents.TransitionIntentWithOutbox(ctx, expectedVersion, intent, auditPrep, nil); err != nil {
 		return ProcessResult{Action: ActionNakDelay, NakDelay: time.Second, Reason: err.Error()}
 	}
 
 	if err := p.router.SendRawTransaction(ctx, rawSigned); err != nil {
-		return p.handleProcessingError(ctx, intent, execID, nonceRes.Nonce, true, err)
+		return p.handleProcessingError(ctx, intent, execID, txNonce, true, err)
 	}
 
 	bcastNow := p.cfg.Now().UTC()

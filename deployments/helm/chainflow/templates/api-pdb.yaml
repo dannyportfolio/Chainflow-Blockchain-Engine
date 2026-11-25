@@ -1,0 +1,13 @@
+{{- if .Values.api.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "chainflow.fullname" . }}-api
+  labels:
+    {{- include "chainflow.roleLabels" (dict "root" . "role" "api") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.api.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "chainflow.roleSelectorLabels" (dict "root" . "role" "api") | nindent 6 }}
+{{- end }}
